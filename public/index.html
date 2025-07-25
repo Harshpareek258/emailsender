@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Email Photo/Video/Message</title>
+  <style>
+    body { font-family: Arial; text-align: center; margin: 30px; }
+    input, textarea, button { width: 300px; padding: 10px; margin: 10px; }
+    video, img { max-width: 300px; margin: 10px auto; display: block; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h2>📨 Send Media or Message</h2>
+  <video id="camera" autoplay muted></video><br>
+  <button onclick="capturePhoto()">📸 Take Photo</button>
+  <button onclick="startRecording()">🎥 Record</button>
+  <button onclick="stopRecording()" id="stopBtn" disabled>⏹ Stop</button>
+  <img id="photoPreview" style="display:none;">
+  <video id="videoPreview" controls style="display:none;"></video>
+  <input type="email" id="email" placeholder="Recipient Email" required><br>
+  <textarea id="message" placeholder="Your message..."></textarea><br>
+  <button onclick="send()">📤 Send Email</button>
+
+<script>
+let mediaStream, recorder, mediaBlob = null, mediaType = null, chunks = [];
+
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  .then(stream => {
+    mediaStream = stream;
+    document.getElementById('camera').srcObject = stream;
+  }).catch(() => alert("Camera access denied."));
+
+function capturePhoto() {
+  const canvas = document.createElement("canvas");
+  const camera = document.getElementById("camera");
+  canvas.width = camera.videoWidth;
+  canvas.height = camera.videoHeight;
+  canvas.getContext("2d").drawImage(camera, 0, 0);
+  canvas.toBlob(blob => {
+    mediaBlob = blob;
+    mediaType = "photo";
+    const photo = document.getElementById("photoPreview");
+    photo.src = URL.createObjectURL(blob);
+    photo.style.display = "block";
+    document.getElementById("videoPreview").style.display = "none";
+  }, 'image/jpeg');
+}
+
+function startRecording() {
+  chunks = [];
+  recorder = new MediaRecorder(mediaStream);
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = () => {
+    mediaBlob = new Blob(chunks, { type: 'video/webm' });
+    mediaType = "video";
+    const vid = document.getElementById("videoPreview");
+    vid.src = URL.createObjectURL(mediaBlob);
+    vid.style.display = "block";
+    document.getElementById("photoPreview").style.display = "none";
+  };
+  recorder.start();
+  document.getElementById("stopBtn").disabled = false;
+}
+
+function stopRecording() {
+  recorder.stop();
+  document.getElementById("stopBtn").disabled = true;
+}
+
+async function send() {
+  const formData = new FormData();
+  const email = document.getElementById('email').value;
+  const message = document.getElementById('message').value;
+
+  if (!email || !message) {
+    alert("Please enter email and message");
+    return;
+  }
+
+  formData.append("email", email);
+  formData.append("message", message);
+
+  if (mediaBlob) {
+    formData.append("media", mediaBlob, mediaType === "photo" ? "photo.jpg" : "video.webm");
+  }
+
+  const res = await fetch("/send", {
+    method: "POST",
+    body: formData
+  });
+
+  const text = await res.text();
+  alert(text);
+}
+</script>
+</body>
+</html>
